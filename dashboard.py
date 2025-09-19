@@ -273,35 +273,39 @@ if selected:
 # Charts
 # -----------------------
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.subheader("Distributions and insights")
 
-# Attendance distribution (histogram)
 col_a, col_b = st.columns(2)
+
+# Attendance distribution with risk overlay
 with col_a:
-    st.caption("Attendance distribution")
+    st.caption("Attendance vs Risk")
     fig, ax = plt.subplots()
-    ax.hist(df["attendance_percent"].dropna(), bins=10, color="skyblue", edgecolor="black")
-    ax.set_xlabel("Attendance %")
-    ax.set_ylabel("Number of Students")
+    sns.boxplot(x="rule_label", y="attendance_percent", data=df, ax=ax, palette={"Red":"#ff4b4b","Amber":"#ffb84d","Green":"#66c266"})
+    ax.set_xlabel("Risk Label")
+    ax.set_ylabel("Attendance %")
     st.pyplot(fig)
 
-# Average score distribution (histogram)
+# Score distribution with risk overlay
 with col_b:
-    st.caption("Average score distribution")
+    st.caption("Scores vs Risk")
     fig, ax = plt.subplots()
-    ax.hist(df["avg_score"].dropna(), bins=10, color="skyblue", edgecolor="black")
-    ax.set_xlabel("Average Score")
-    ax.set_ylabel("Number of Students")
+    sns.boxplot(x="rule_label", y="avg_score", data=df, ax=ax, palette={"Red":"#ff4b4b","Amber":"#ffb84d","Green":"#66c266"})
+    ax.set_xlabel("Risk Label")
+    ax.set_ylabel("Average Score")
     st.pyplot(fig)
 
-# Risk label distribution (pie chart)
-st.caption("Risk distribution")
-risk_counts = df["rule_label"].value_counts()
-fig, ax = plt.subplots()
-ax.pie(risk_counts, labels=risk_counts.index, autopct="%1.1f%%", startangle=90, colors=["green", "orange", "red"])
-ax.set_title("Risk Levels")
+# Stacked bar chart of counts
+st.caption("Risk distribution across mentors")
+mentor_risk_counts = df.groupby(["mentor","rule_label"]).size().unstack(fill_value=0)
+fig, ax = plt.subplots(figsize=(8,4))
+mentor_risk_counts.plot(kind="bar", stacked=True, color={"Red":"#ff4b4b","Amber":"#ffb84d","Green":"#66c266"}, ax=ax)
+ax.set_ylabel("Number of Students")
+ax.set_title("Mentor-wise Risk Levels")
 st.pyplot(fig)
+
 
 
 # quick pivot
