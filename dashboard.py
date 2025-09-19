@@ -113,7 +113,10 @@ else:
 # -----------------------
 # Apply rules and show top metrics
 # -----------------------
-df = evaluate_risk(df, thresholds)
+if "evaluate_risk" in globals():
+    df = evaluate_risk(df, thresholds)
+else:
+    st.error("Risk evaluation function not found.")
 
 st.title("Dropout Risk Dashboard")
 st.markdown("A simple, transparent dashboard to spot students at risk early.")
