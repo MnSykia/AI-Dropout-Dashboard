@@ -272,14 +272,37 @@ if selected:
 # -----------------------
 # Charts
 # -----------------------
+import matplotlib.pyplot as plt
+
 st.subheader("Distributions and insights")
+
+# Attendance distribution (histogram)
 col_a, col_b = st.columns(2)
 with col_a:
     st.caption("Attendance distribution")
-    st.bar_chart(df["attendance_percent"].dropna().astype(float).value_counts(bins=20).sort_index())
+    fig, ax = plt.subplots()
+    ax.hist(df["attendance_percent"].dropna(), bins=10, color="skyblue", edgecolor="black")
+    ax.set_xlabel("Attendance %")
+    ax.set_ylabel("Number of Students")
+    st.pyplot(fig)
+
+# Average score distribution (histogram)
 with col_b:
     st.caption("Average score distribution")
-    st.bar_chart(df["avg_score"].dropna().astype(float).value_counts(bins=20).sort_index())
+    fig, ax = plt.subplots()
+    ax.hist(df["avg_score"].dropna(), bins=10, color="skyblue", edgecolor="black")
+    ax.set_xlabel("Average Score")
+    ax.set_ylabel("Number of Students")
+    st.pyplot(fig)
+
+# Risk label distribution (pie chart)
+st.caption("Risk distribution")
+risk_counts = df["rule_label"].value_counts()
+fig, ax = plt.subplots()
+ax.pie(risk_counts, labels=risk_counts.index, autopct="%1.1f%%", startangle=90, colors=["green", "orange", "red"])
+ax.set_title("Risk Levels")
+st.pyplot(fig)
+
 
 # quick pivot
 flag_rows = []
