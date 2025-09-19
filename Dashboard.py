@@ -57,12 +57,16 @@ def generate_sample_data(n=150, seed=42):
 # -----------------------
 @st.cache_data
 def load_and_merge(att_path=None, scores_path=None, fees_path=None):
-    # If the user provided file paths, try to read them. Otherwise generate sample data.
     if att_path and scores_path and fees_path:
         try:
             att = pd.read_csv(att_path)
             sc = pd.read_csv(scores_path)
-            fees = pd.read_csv(fees_path, parse_dates=["last_payment_date"], dayfirst=False, infer_datetime_format=True)
+            fees = pd.read_csv(fees_path)
+
+            # Only parse last_payment_date if present
+            if "last_payment_date" in fees.columns:
+                fees["last_payment_date"] = pd.to_datetime(fees["last_payment_date"], errors="coerce")
+
         except Exception as e:
             st.warning("Could not read provided CSVs. Falling back to sample data. Error: " + str(e))
             att, sc, fees = generate_sample_data()
@@ -73,23 +77,14 @@ def load_and_merge(att_path=None, scores_path=None, fees_path=None):
     df = att.merge(sc, on="student_id", how="outer")
     df = df.merge(fees, on="student_id", how="outer")
 
-    # fill defaults
-    df["attendance_percent"] = pd.to_numeric(df.get("attendance_percent", 0), errors="coerce").fillna(0)
-    if "avg_score" not in df.columns or df["avg_score"].isnull().all():
-        score_cols = [c for c in df.columns if c.startswith("assessment_")]
-        if score_cols:
-            df["avg_score"] = df[score_cols].mean(axis=1)
-        else:
-            df["avg_score"] = 0
-    df["avg_score"] = pd.to_numeric(df["avg_score"], errors="coerce").fillna(0)
-    df["failed_attempts"] = pd.to_numeric(df.get("failed_attempts", 0), errors="coerce").fillna(0).astype(int)
-
+    # ensure consistent types
     today = pd.to_datetime(datetime.now().date())
+    df["attendance_percent"] = pd.to_numeric(df.get("attendance_percent", 0), errors="coerce").fillna(0)
+    df["avg_score"] = pd.to_numeric(df.get("avg_score", 0), errors="coerce").fillna(0)
+    df["failed_attempts"] = pd.to_numeric(df.get("failed_attempts", 0), errors="coerce").fillna(0).astype(int)
     df["last_payment_date"] = pd.to_datetime(df.get("last_payment_date"), errors="coerce")
-    df["fees_overdue_days"] = (today - df["last_payment_date"]).dt.days
-    df["fees_overdue_days"] = df["fees_overdue_days"].fillna(999)  # 999 indicates unknown / long overdue
+    df["fees_overdue_days"] = (today - df["last_payment_date"]).dt.days.fillna(999)
 
-    # keep important columns
     cols = ["student_id","name","course","mentor","attendance_percent","avg_score","failed_attempts","fees_overdue_days"]
     for c in cols:
         if c not in df.columns:
@@ -97,100 +92,21 @@ def load_and_merge(att_path=None, scores_path=None, fees_path=None):
     return df[cols]
 
 # -----------------------
-# Rule engine
-# -----------------------
-def evaluate_risk(df, thresholds):
-    labels = []
-    flags = []
-    score_map = {"green":0,"amber":1,"red":2}
-    risk_scores = []
-    for _, r in df.iterrows():
-        f = {}
-        # attendance
-        if r["attendance_percent"] < thresholds["attendance_red"]:
-            f["attendance"] = "red"
-        elif r["attendance_percent"] < thresholds["attendance_amber"]:
-            f["attendance"] = "amber"
-        else:
-            f["attendance"] = "green"
-        # score
-        if r["avg_score"] < thresholds["score_red"]:
-            f["score"] = "red"
-        elif r["avg_score"] < thresholds["score_amber"]:
-            f["score"] = "amber"
-        else:
-            f["score"] = "green"
-        # attempts
-        if r["failed_attempts"] >= thresholds["failed_attempts_red"]:
-            f["attempts"] = "red"
-        elif r["failed_attempts"] >= thresholds["failed_attempts_amber"]:
-            f["attempts"] = "amber"
-        else:
-            f["attempts"] = "green"
-        # fees
-        fod = r.get("fees_overdue_days", 999)
-        if fod >= thresholds["fees_overdue_days_red"]:
-            f["fees"] = "red"
-        elif fod >= thresholds["fees_overdue_days_amber"]:
-            f["fees"] = "amber"
-        else:
-            f["fees"] = "green"
-
-        # combined label
-        if "red" in f.values():
-            label = "Red"
-        elif "amber" in f.values():
-            label = "Amber"
-        else:
-            label = "Green"
-
-        rs = sum(score_map[v] for v in f.values())
-        labels.append(label)
-        flags.append(f)
-        risk_scores.append(rs)
-
-    df = df.copy()
-    df["rule_label"] = labels
-    df["rule_flags"] = flags
-    df["rule_risk_score"] = risk_scores
-    return df
-
-# -----------------------
-# Sidebar: file upload and thresholds
+# Sidebar: file upload
 # -----------------------
 st.sidebar.header("Data Input")
 uploaded_att = st.sidebar.file_uploader("Upload attendance CSV", type=["csv"])
 uploaded_scores = st.sidebar.file_uploader("Upload scores CSV", type=["csv"])
 uploaded_fees = st.sidebar.file_uploader("Upload fees CSV", type=["csv"])
 
-use_uploaded = uploaded_att is not None and uploaded_scores is not None and uploaded_fees is not None
-
-st.sidebar.header("Risk Thresholds")
-attendance_red = st.sidebar.number_input("Attendance red threshold (below)", min_value=0, max_value=100, value=65)
-attendance_amber = st.sidebar.number_input("Attendance amber threshold (below)", min_value=0, max_value=100, value=75)
-score_red = st.sidebar.number_input("Score red threshold (below)", min_value=0, max_value=100, value=35)
-score_amber = st.sidebar.number_input("Score amber threshold (below)", min_value=0, max_value=100, value=50)
-failed_red = st.sidebar.number_input("Failed attempts red (>=)", min_value=0, value=2)
-failed_amber = st.sidebar.number_input("Failed attempts amber (>=)", min_value=0, value=1)
-fees_red = st.sidebar.number_input("Fees overdue days red (>=)", min_value=0, value=30)
-fees_amber = st.sidebar.number_input("Fees overdue days amber (>=)", min_value=0, value=7)
-
-thresholds = {
-    "attendance_red": attendance_red,
-    "attendance_amber": attendance_amber,
-    "score_red": score_red,
-    "score_amber": score_amber,
-    "failed_attempts_red": failed_red,
-    "failed_attempts_amber": failed_amber,
-    "fees_overdue_days_red": fees_red,
-    "fees_overdue_days_amber": fees_amber
-}
+use_uploaded = uploaded_att and uploaded_scores and uploaded_fees
+process_now = st.sidebar.button("Process Uploaded Files")
 
 # -----------------------
 # Load data
 # -----------------------
-if use_uploaded:
-    df = load_and_merge(att_path=uploaded_att, scores_path=uploaded_scores, fees_path=uploaded_fees)
+if use_uploaded and process_now:
+    df = load_and_merge(uploaded_att, uploaded_scores, uploaded_fees)
 else:
     df = load_and_merge()
 
