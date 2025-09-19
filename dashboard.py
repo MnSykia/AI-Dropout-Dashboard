@@ -244,8 +244,13 @@ disp["label_html"] = disp["rule_label"].apply(label_badge)
 disp_for_table = disp.drop(columns=["rule_label"])
 
 st.subheader("Students table")
-st.markdown("You can sort the table columns. Click a row to view details below.")
-st.dataframe(disp_for_table.style.format({"attendance_percent": "{:.1f}", "avg_score": "{:.1f}"}), height=420)
+st.markdown("You can sort the table columns. Risk labels are shown with color coding.")
+
+# Render table with HTML (labels will be styled)
+st.write(
+    disp_for_table.to_html(escape=False, index=False), 
+    unsafe_allow_html=True
+)
 
 # -----------------------
 # Student details
